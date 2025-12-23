@@ -9,13 +9,17 @@ root = tree.getroot()
 print("Root tag:", root.tag)
 
 # Loop through elements
-for employee in root.findall("employee"):
-    emp_id = employee.get("id")
-    name = employee.find("name").text
-    department = employee.find("department").text
-    salary = employee.find("salary").text
 
-    print(f"ID: {emp_id}, Name: {name}, Department: {department}, Salary: {salary}")
+def xml_parser(filepath):
+    for employee in root.findall("employee"):
+        emp_id = employee.get("id")
+        name = employee.find("name").text
+        department = employee.find("department").text
+        salary = employee.find("salary").text
+
+        print(f"ID: {emp_id}, Name: {name}, Department: {department}, Salary: {salary}")
+    
+    return salary
 
 
 # Parse Excel Using Pandas
