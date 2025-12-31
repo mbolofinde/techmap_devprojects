@@ -1,95 +1,60 @@
+import xml.etree.ElementTree as ET
 import pandas as pd
 
 # -------------------------------------------------
-# 1. Load DataStage Job Inventory Excel
+# 1. Load and Parse XML File
 # -------------------------------------------------
-excel_file = "Comprehensive_DataStage_Job_Inventory.xlsx"
-df = pd.read_excel(excel_file, sheet_name="DataStage Job Inventory")
+xml_file = "DataStage_Job_Inventory.xml"
+tree = ET.parse(xml_file)
+root = tree.getroot()
 
-# -------------------------------------------------
-# 2. Effort Roll-ups
-# -------------------------------------------------
-effort_by_wave = (
-    df.groupby("Migration Wave")["Estimated Effort (Days)"]
-    .sum()
-    .reset_index()
-)
-
-effort_by_platform = (
-    df.groupby("Target Platform (IDMC/AWS)")["Estimated Effort (Days)"]
-    .sum()
-    .reset_index()
-)
-
-effort_by_readiness = (
-    df.groupby("Migration Readiness")["Estimated Effort (Days)"]
-    .sum()
-    .reset_index()
-)
+jobs_data = []
 
 # -------------------------------------------------
-# 3. Generate Jira Subtasks (Bulk Upload)
+# 2. Extract Job-Level Data
 # -------------------------------------------------
-jira_subtasks = []
+for job in root.findall("Job"):
+    job_record = {
+        "Job ID": job.findtext("JobID"),
+        "Job Name": job.findtext("JobName"),
+        "Job Type": job.findtext("JobType"),
+        "Category": job.findtext("Category"),
 
-for _, row in df.iterrows():
-    jira_subtasks.append({
-        "Issue Type": "Sub-task",
-        "Summary": f"Migrate DataStage Job - {row['Job Name']}",
-        "Description": (
-            f"Job Type: {row['Job Type']}\n"
-            f"Source: {row['Source System']} → Target: {row['Target System']}\n"
-            f"Complexity: {row['Complexity']}\n"
-            f"Migration Platform: {row['Target Platform (IDMC/AWS)']}"
-        ),
-        "Migration Wave": row["Migration Wave"],
-        "Estimated Effort (Days)": row["Estimated Effort (Days)"],
-        "Risk Level": row["Risk Level"]
-    })
+        "Source System": job.find("Source/System").text if job.find("Source/System") is not None else None,
+        "Source Type": job.find("Source/Type").text if job.find("Source/Type") is not None else None,
 
-jira_df = pd.DataFrame(jira_subtasks)
-jira_df.to_csv("Jira_Subtasks_From_DataStage_Inventory.csv", index=False)
+        "Target System": job.find("Target/System").text if job.find("Target/System") is not None else None,
+        "Target Type": job.find("Target/Type").text if job.find("Target/Type") is not None else None,
 
-# -------------------------------------------------
-# 4. Generate Management Summary Report
-# -------------------------------------------------
-summary_report = f"""
-DataStage Migration – Assessment Summary
-=======================================
+        "Transformations Used": job.find("TechnicalDetails/Transformations").text if job.find("TechnicalDetails/Transformations") is not None else None,
+        "Stages Used": job.find("TechnicalDetails/StagesUsed").text if job.find("TechnicalDetails/StagesUsed") is not None else None,
+        "Reusable Components": job.find("TechnicalDetails/ReusableComponents").text if job.find("TechnicalDetails/ReusableComponents") is not None else None,
+        "Error Handling": job.find("TechnicalDetails/ErrorHandling").text if job.find("TechnicalDetails/ErrorHandling") is not None else None,
 
-Total Jobs Assessed: {len(df)}
-Total Migration Effort (Days): {df['Estimated Effort (Days)'].sum()}
+        "Dependencies": job.find("Operations/Dependencies").text if job.find("Operations/Dependencies") is not None else None,
+        "Scheduling Tool": job.find("Operations/SchedulingTool").text if job.find("Operations/SchedulingTool") is not None else None,
+        "Frequency": job.find("Operations/Frequency").text if job.find("Operations/Frequency") is not None else None,
+        "Avg Runtime (mins)": job.find("Operations/AverageRuntimeMinutes").text if job.find("Operations/AverageRuntimeMinutes") is not None else None,
+        "Data Volume": job.find("Operations/DataVolume").text if job.find("Operations/DataVolume") is not None else None,
 
---- Effort by Migration Wave ---
-{effort_by_wave.to_string(index=False)}
+        "Target Platform": job.find("Migration/TargetPlatform").text if job.find("Migration/TargetPlatform") is not None else None,
+        "Migration Readiness": job.find("Migration/Readiness").text if job.find("Migration/Readiness") is not None else None,
+        "Estimated Effort (Days)": job.find("Migration/EstimatedEffortDays").text if job.find("Migration/EstimatedEffortDays") is not None else None,
+        "Migration Wave": job.find("Migration/MigrationWave").text if job.find("Migration/MigrationWave") is not None else None,
+        "Risk Level": job.find("Migration/RiskLevel").text if job.find("Migration/RiskLevel") is not None else None,
 
---- Effort by Target Platform ---
-{effort_by_platform.to_string(index=False)}
+        "Remarks": job.findtext("Remarks")
+    }
 
---- Effort by Migration Readiness ---
-{effort_by_readiness.to_string(index=False)}
-
-Key Observations:
-- High complexity jobs are primarily Fact Loads
-- AWS-target jobs require higher redesign effort
-- IDMC jobs are mostly migration-ready
-"""
-
-with open("DataStage_Migration_Executive_Summary.txt", "w") as f:
-    f.write(summary_report)
+    jobs_data.append(job_record)
 
 # -------------------------------------------------
-# 5. Generate Confluence-ready Table
+# 3. Write Parsed Data to Excel
 # -------------------------------------------------
-columns = df.columns.tolist()
+df = pd.DataFrame(jobs_data)
 
-confluence_table = "| " + " | ".join(columns) + " |\n"
-confluence_table += "| " + " | ".join(["---"] * len(columns)) + " |\n"
+excel_output = "Parsed_DataStage_Job_Inventory.xlsx"
+df.to_excel(excel_output, index=False, sheet_name="DataStage Job Inventory")
 
-for _, row in df.iterrows():
-    confluence_table += "| " + " | ".join(str(row[col]) for col in columns) + " |\n"
-
-with open("Confluence_DataStage_Job_Inventory_Table.txt", "w") as f:
-    f.write(confluence_table)
-
-print("✔ DataStage migration artifacts generated successfully.")
+print("✔ XML successfully parsed and written to Excel")
+print(f"✔ Output file: {excel_output}")
